@@ -1,0 +1,232 @@
+---
+title: "MIPT-SF Biostats HW3"
+author: "Smola EV"
+date: "`r Sys.Date()`"
+output: html_document
+---
+```{=html}
+<style type="text/css">
+body{
+  font-family: Arial;
+  font-size: 11pt;
+}
+/* Headers */
+h1, h2{
+  font-size: 16pt;
+}
+</style>
+```
+
+Подготовка библиотек
+
+```{r setup, include=TRUE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(
+	message = FALSE,
+	warning = FALSE,
+	include = FALSE
+)
+library(dplyr)
+library(ggplot2)
+library(readxl)
+```
+
+
+Загрузить данные
+
+```{r, include=TRUE}
+file_path <- "C:/Users/Елена/Downloads/pima.xlsx"
+dm_data <- read_excel (file_path)
+```
+
+Проверить структуру данных и наличие нулевых значений для параметров датасета
+
+```{r, include=TRUE}
+str(dm_data)
+zero_counts <- colSums(dm_data == 0)
+print(zero_counts)
+```
+
+Как видим, в датасете большое количество нулевых значений - возможно, ошибки сбора данных. В таком случае можно либо полностью зачистить датасет (удалить все строки, в которых хотя бы один параметр имеет нулевое значение) либо использовать таргетную очистку датасета в рамках работы с набором параметров (т.е. очистку сабсета). Я выбрала второй подход, т.к. при первом подходе датасет сокращается более чем на 50%, и теряются значения других параметров.
+
+Задача 1: Рассчитать описательные характеристики для glucose, pressure, mass.
+
+В датасете у каждой из этих переменных есть нулевые значения, как было отмечено выше. Нулевые значения нужно исключить, чтобы они не влияли на расчет характеристик.
+
+```{r, include=TRUE}
+# Подсчитать количество нулевых значений для каждого параметра
+zero_counts <- dm_data %>%
+  summarize(
+    glucose_zero = sum(glucose == 0),
+    pressure_zero = sum(pressure == 0),
+    mass_zero = sum(mass == 0)
+  )
+
+# Исключить нулевые значения из датасета
+dm_data_filtered <- dm_data %>%
+  filter(glucose != 0 & pressure != 0 & mass != 0)
+
+# Подсчитать характеристики для "glucose" после исключения нулей
+glucose_stats <- dm_data %>%
+  summarize(
+    parameter = "glucose",
+    observations = n(),
+    non_zero_observations = sum(glucose != 0),
+    mean = mean(dm_data_filtered$glucose),
+    sd = sd(dm_data_filtered$glucose),
+    min = min(dm_data_filtered$glucose),
+    max = max(dm_data_filtered$glucose),
+    quartile_1 = quantile(dm_data_filtered$glucose, probs = 0.25),
+    quartile_3 = quantile(dm_data_filtered$glucose, probs = 0.75),
+    zero_entries = zero_counts$glucose_zero
+  )
+
+# Подсчитать характеристики для "pressure" после исключения нулей
+pressure_stats <- dm_data %>%
+  summarize(
+    parameter = "pressure",
+    observations = n(),
+    non_zero_observations = sum(pressure != 0),
+    mean = mean(dm_data_filtered$pressure),
+    sd = sd(dm_data_filtered$pressure),
+    min = min(dm_data_filtered$pressure),
+    max = max(dm_data_filtered$pressure),
+    quartile_1 = quantile(dm_data_filtered$pressure, probs = 0.25),
+    quartile_3 = quantile(dm_data_filtered$pressure, probs = 0.75),
+    zero_entries = zero_counts$pressure_zero
+  )
+
+# Подсчитать характеристики для "mass" после исключения нулей
+mass_stats <- dm_data %>%
+  summarize(
+    parameter = "mass",
+    observations = n(),
+    non_zero_observations = sum(mass != 0),
+    mean = mean(dm_data_filtered$mass),
+    sd = sd(dm_data_filtered$mass),
+    min = min(dm_data_filtered$mass),
+    max = max(dm_data_filtered$mass),
+    quartile_1 = quantile(dm_data_filtered$mass, probs = 0.25),
+    quartile_3 = quantile(dm_data_filtered$mass, probs = 0.75),
+    zero_entries = zero_counts$mass_zero
+  )
+
+# Объединить описательные характеристики в датафрейм
+descriptive_stats_filtered <- bind_rows(glucose_stats, pressure_stats, mass_stats)
+
+# Вывести описательные характеристики для каждого параметра
+print(descriptive_stats_filtered)
+```
+
+Задача 2
+Рассчитать описательную характеристику для "diabetes". На основе переменной "age" создать переменную "age_group". Рассчитать описательную характеристику для "age_group".
+
+```{r, include=TRUE}
+# Рассчитать абсолютную частоту
+absolute_freq <- dm_data %>%
+  group_by(diabetes) %>%
+  summarize(absolute_frequency = n())
+
+# Рассчитать относительную частоту
+relative_freq <- dm_data %>%
+  group_by(diabetes) %>%
+  summarize(relative_frequency = n() / nrow(dm_data))
+
+# Объединить полученные значения в единый датафрейм
+diabetes_stats <- left_join(absolute_freq, relative_freq, by = "diabetes")
+
+# Вывести описательные характеристики для переменной "diabetes"
+print(diabetes_stats)
+
+# Задача 2b: Создайте на основе переменной age новую переменную age_group, 
+# которая будет отражать следующие возрастные группы: 21–35, 36–49 и 50+. 
+# Посчитать описательную статистику для новой переменной.
+
+# Сгруппировать данные о возрасте 
+dm_data$age_group <- cut(dm_data$age, breaks = c(21, 36, 50, Inf), labels = c("21-35", "36-49", "50 plus"), right = FALSE)
+
+# Рассчитать описательные характеристики для переменной age_group
+age_group_stats <- dm_data %>%
+  group_by(age_group) %>%
+  summarize(
+    observations = n(),
+    mean = mean(age),
+    sd = sd(age),
+    min = min(age),
+    max = max(age),
+    quartile_1 = quantile(age, probs = 0.25),
+    quartile_3 = quantile(age, probs = 0.75)
+  )
+
+# Вывести описательные характеристики для переменной "age_group"
+print(age_group_stats)
+```
+
+Задача 3: рассчитать 90% доверительный интервал для переменной "pedigree"
+
+```{r, include=TRUE}
+confidence_interval <- t.test(dm_data$pedigree, conf.level = 0.90)$conf.int
+
+# Вывести расчет доверительного интервала
+print(confidence_interval)
+```
+
+Задача 4: построить три графика для переменной "glucose"
+
+```{r, include=TRUE}
+# 0. Очищаем датасет от нулевых значений параметра "glucose"
+cleaned_dm_data <- dm_data[dm_data$glucose != 0, ]
+
+# 1. График плотности вероятности с отмеченным средним значением
+density_plot <- ggplot(cleaned_dm_data, aes(x = glucose)) +
+  geom_density(fill = "skyblue", color = "black", alpha = 0.7) +
+  geom_vline(aes(xintercept = mean(glucose)), color = "red", linetype = "dashed", size = 1) +
+  ggtitle("Плотность вероятности для Глюкозы") +
+  xlab("Глюкоза") +
+  ylab("Плотность") +
+  theme_minimal()
+
+# 2. Гистограмма
+histogram <- ggplot(cleaned_dm_data, aes(x = glucose)) +
+  geom_histogram(fill = "skyblue", color = "black", alpha = 0.7) +
+  ggtitle("Гистограмма для Глюкозы") +
+  xlab("Глюкоза") +
+  ylab("Частота") +
+  theme_minimal()
+
+# 3. "Ящик с усами" относительно значений pos и neg параметра "diabetes"
+boxplot <- ggplot(cleaned_dm_data, aes(x = diabetes, y = glucose, fill = diabetes)) +
+  geom_boxplot() +
+  ggtitle("Уровень Глюкозы по наличию Диабета") +
+  xlab("Диабет") +
+  ylab("Глюкоза") +
+  scale_fill_manual(values = c("skyblue", "salmon")) +  # Цвета для параметров "pos" и "neg"
+  theme_minimal()
+
+# Отобразить графики 1-3
+print(density_plot)
+print(histogram)
+print(boxplot)
+```
+
+Задача 5: построить две диаграммы рассеяния для наличия и отсутствия диабета в одной системе координат "triceps" - "mass"
+
+```{r, include=TRUE}
+# Очистить датасет от нулевых значений "triceps" и "mass"
+cleaned_dm_data <- dm_data[dm_data$triceps != 0 & dm_data$mass != 0, ]
+
+# Создать две диаграммы рассеяния в одной системе координат
+scatter_plot <- ggplot(cleaned_dm_data, aes(x = triceps, y = mass, color = diabetes, fill = diabetes)) +
+  geom_point(alpha = 0.5) +
+  ggtitle("Диаграммы рассеяния наличия диабета в системе Объем трицепса vs Масса тела") +
+  xlab("Объем трицепса") +
+  ylab("Масса тела") +
+  scale_color_manual(values = c("neg" = "blue", "pos" = "red")) +
+  scale_fill_manual(values = c("neg" = "lightblue", "pos" = "pink")) +
+  theme_minimal() +
+  facet_grid(. ~ diabetes)
+
+# Вывести график
+print(scatter_plot)
+```
+
+
